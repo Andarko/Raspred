@@ -1,0 +1,4 @@
+*.pyc
+.~lock.*.odt*
+venv
+TEMP

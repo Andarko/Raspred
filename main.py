@@ -8,7 +8,7 @@ import sys
 class Main:
     def __init__(self):
         # Задачи
-        self.count_tasks = 10
+        self.count_tasks = 20
         self.tasks = list()
         # self.task_middle_score = list()
         r = Random()
@@ -66,89 +66,21 @@ class Main:
                   + str(worker.scores_norm))
 
         print("inited")
-        self.distribute()
 
     # Функция, распределяющая задачи по сотрудникам целыми
-    def distribute(self):
-        # Метод отдает задачи тем работникам, которые дают за них минимальные оценки
-        # Однако он может оставить отдельных людей без работы
-        # if method == 0:
-        #     free_workers_count = self.count_workers
-        #     free_tasks_count = self.count_tasks
-        #     undistributed = 0
-        #     work_norm_sum = 0
-        #     for worker in self.workers:
-        #         work_norm_sum += worker.work_norm
-        #         for i in range(self.count_tasks):
-        #             undistributed += worker.scores_norm[i]
-        #
-        #     while free_tasks_count and free_workers_count:
-        #         # 1. Проверка - не будет ли переполнен ли какой работник задачами со следующей,
-        #         # которая ему предназначена согласно минимальной оценке
-        #         # Вычисляем сумму всех оставшихся нераспределенных задач
-        #
-        #         # for i in self.count_tasks:
-        #         #     if self.tasks[i].free:
-        #         #         for worker in self.workers:
-        #         #             if worker.free:
-        #         #                 undistributed_sum += worker.scores_norm[i]
-        #         # undistributed_sum /= free_workers_count
-        #
-        #         # 2. Ищем самый большой перекос в оценке задач и отдаем задачу тому, кому проще с ней справится
-        #         # Ищем наибольший перекос
-        #         max_delta = 0
-        #         max_delta_index = -1
-        #         for i in range(self.count_tasks):
-        #             if self.tasks[i].free:
-        #                 min_score = sys.float_info.max
-        #                 max_score = 0.0
-        #                 for worker in self.workers:
-        #                     if worker.free:
-        #                         if max_score < worker.scores_norm[i]:
-        #                             max_score = worker.scores_norm[i]
-        #                         if min_score > worker.scores_norm[i]:
-        #                             min_score = worker.scores_norm[i]
-        #                 if max_delta < max_score / min_score:
-        #                     max_delta = max_score / min_score
-        #                     max_delta_index = i
-        #
-        #         min_score = sys.float_info.max
-        #         for worker in self.workers:
-        #             if min_score > worker.scores_norm[max_delta_index]:
-        #                 min_score = worker.scores_norm[max_delta_index]
-        #                 worker_min_score = worker
-        #         min_score = sys.float_info.max
-        #         if not worker_min_score.free:
-        #             print("Worker " + str(worker_min_score.index) + " не получил работу " + str(max_delta_index))
-        #             for worker in self.workers:
-        #                 if min_score > worker.scores_norm[max_delta_index]:
-        #                     if worker.free:
-        #                         min_score = worker.scores_norm[max_delta_index]
-        #                         worker_min_score = worker
-        #
-        #         # Присвоение задачи
-        #         self.tasks[max_delta_index].free = False
-        #         worker_min_score.tasks.append(self.tasks[max_delta_index])
-        #         worker_min_score.task_scores_sum += worker_min_score.scores_norm[max_delta_index]
-        #         if worker_min_score.task_scores_sum > worker_min_score.work_limit:
-        #             worker_min_score.free = False
-        #             print("Worker limit " + str(worker_min_score.index))
-        #         free_tasks_count -= 1
-        #
-        #     print("distributed!")
-        #     for worker in self.workers:
-        #         tasks_list = list()
-        #         for task in worker.tasks:
-        #             tasks_list.append(task.index)
-        #         print("Worker " + str(worker.index) + ": " + str(round(worker.task_scores_sum, 3))
-        #               + "\t" + str(tasks_list))
-        #
-        # # Используем другой метод - будем отдавать работу на конкурс самым незагруженным работникам
-        # # Незагруженность может быть одна по значению, а может быть и включение других людей по небольшому диапазону
-        # # Если незагруженный работник один, то берет работу, наиболее ему подходящую по сравнению с остальными
-        # # (сравниваем его оценку с наибольшей)
-        # # Если несколько, то делаем то же самое, но выбираем среди оценок всех работников конкурса
-        # elif method == 1:
+    def distribute_soft(self, overwork_rate=0.4):
+        for task in self.tasks:
+            # task.min_score = 1
+            task.need_take = True
+            task.free = True
+            task.worker = None
+        for worker in self.workers:
+            worker.need_work = True
+            worker.free = True
+            worker.tasks = list()
+            worker.task_scores_sum = 0.0
+        print("rate=" + str(overwork_rate))
+        # overwork_rate - насколько учитывать переработку в оценке задач
         free_workers_count = self.count_workers
         free_tasks_count = self.count_tasks
         undistributed = 0
@@ -163,9 +95,107 @@ class Main:
                 undistributed += worker.scores_norm[i]
 
         while free_tasks_count and free_workers_count:
-            # Коэффициент, определяющий насколько загруженность работника должна превышить минимальную среди всех
-            # чтобы ему не участвовать в следующем конкурсе распределения работ
-            worker_engagement_rate = 0.15
+            # Ищем самого незагруженого работника
+            lazy_worker_score = sys.float_info.max
+            for worker in self.workers:
+                if worker.free:
+                    if lazy_worker_score > worker.task_scores_sum:
+                        lazy_worker_score = worker.task_scores_sum
+
+            for task in self.tasks:
+                if task.free:
+                    task.need_take = True
+
+            # Ищем наибольший перекос
+            max_delta = -1
+            max_delta_index = -1
+            for i in range(self.count_tasks):
+                if self.tasks[i].free and self.tasks[i].need_take:
+                    task_workers_list = list()
+                    min_score = sys.float_info.max
+                    min_worker = None
+                    avg_score = 0.0
+                    # Хорошо было бы оценивать не по average, а как-то сложнее ???
+                    count = 0
+                    for worker in self.workers:
+                        if worker.free:
+                            task_workers_list.append((worker, worker.scores_norm[i]))
+                            # if max_score < worker.scores_norm[i]:
+                            #     max_score = worker.scores_norm[i]
+                            avg_score += worker.scores_norm[i]
+                            count += 1
+                            if min_score > worker.scores_norm[i]:
+                                min_score = worker.scores_norm[i]
+                                min_worker = worker
+                    avg_score /= count
+                    score_delta = 0.0
+                    rate = 1.0
+                    task_workers_sorted_list = sorted(task_workers_list, key=lambda work: work[1])
+
+                    for worker_score in task_workers_sorted_list:
+                        if worker_score[1] >= min_score:
+                            score_delta += (worker_score[1] + worker_score[0].task_scores_sum * overwork_rate
+                                            - min_score - min_worker.task_scores_sum * overwork_rate) \
+                                           * rate
+                            rate /= 2
+
+                    # if max_delta < avg_score - min_score:
+                    if max_delta < score_delta:
+                        # max_delta = avg_score - min_score
+                        max_delta = score_delta
+                        max_delta_index = i
+
+            min_score = sys.float_info.max
+            for worker in self.workers:
+                if worker.free:
+                    if min_score > worker.scores_norm[max_delta_index] + worker.task_scores_sum * overwork_rate:
+                        min_score = worker.scores_norm[max_delta_index] + worker.task_scores_sum * overwork_rate
+                        worker_min_score = worker
+
+            # Присвоение задачи
+            print(str(worker_min_score.index) + "<=" + str(max_delta_index) + ": "
+                  + str(round(worker_min_score.scores_norm[max_delta_index], 3))
+                  + "(+" + str(round(worker_min_score.scores_norm[max_delta_index]
+                                     - self.tasks[max_delta_index].min_score, 3)) + ")")
+
+            self.tasks[max_delta_index].free = False
+            self.tasks[max_delta_index].need_take = False
+            self.tasks[max_delta_index].worker = worker_min_score
+            worker_min_score.tasks.append(self.tasks[max_delta_index])
+            worker_min_score.task_scores_sum += worker_min_score.scores_norm[max_delta_index]
+            if worker_min_score.task_scores_sum > worker_min_score.work_limit:
+                worker_min_score.free = False
+                # print("Worker limit " + str(worker_min_score.index))
+            free_tasks_count -= 1
+
+        print("distributed!")
+        for worker in self.workers:
+            tasks_list = list()
+            for task in worker.tasks:
+                tasks_list.append(task.index)
+            print("Worker " + str(worker.index) + ": " + str(round(worker.task_scores_sum, 3))
+                  + "\t" + str(tasks_list))
+
+    # Функция, распределяющая задачи по сотрудникам целыми
+    def distribute(self):
+        # Коэффициент, определяющий насколько загруженность работника должна превышить минимальную среди всех
+        # чтобы ему не участвовать в следующем конкурсе распределения работ
+        worker_engagement_rate = 0.15
+
+        free_workers_count = self.count_workers
+        free_tasks_count = self.count_tasks
+        undistributed = 0
+        work_norm_sum = 0
+        # Максимальный лимит работы среди работников
+        max_work_limit = 0
+        for worker in self.workers:
+            if max_work_limit < worker.work_limit:
+                max_work_limit = worker.work_limit
+            work_norm_sum += worker.work_norm
+            for i in range(self.count_tasks):
+                undistributed += worker.scores_norm[i]
+
+        while free_tasks_count and free_workers_count:
             # Ищем самого незагруженого работника
             lazy_worker_score = sys.float_info.max
             for worker in self.workers:
@@ -177,7 +207,7 @@ class Main:
             for worker in self.workers:
                 if worker.free:
                     worker.need_work = worker.task_scores_sum \
-                                       <= lazy_worker_score + worker_engagement_rate * max_work_limit
+                                       <= lazy_worker_score + worker_engagement_rate * worker.work_limit
 
             # # Коэффициент определяет насколько работа должна быть оценена меньше максимальной
             # # чтобы ее рассматривать в работу
@@ -259,9 +289,8 @@ class Main:
             for worker in self.workers:
                 if worker.free and worker.need_work:
                     if min_score > worker.scores_norm[max_delta_index]:
-                        if worker.free and worker.need_work:
-                            min_score = worker.scores_norm[max_delta_index]
-                            worker_min_score = worker
+                        min_score = worker.scores_norm[max_delta_index]
+                        worker_min_score = worker
 
             # Присвоение задачи
             print(str(worker_min_score.index) + "<=" + str(max_delta_index) + ": "
@@ -328,11 +357,23 @@ class Task:
         self.min_score = 1
 
         # Данные - результат решения
-        self.worker: Worker
+        self.worker = None
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     main = Main()
+    rate = 0.4
+    while True:
+        txt = input("Введите команду (\"новая\" - новые данные, цифра до 1 - новое распределение с заданным коэф: ")
+        if str.lower(txt) == "новая" or str.lower(txt) == "нов" or str.lower(txt) == "н":
+            main = Main()
+        else:
+            try:
+                rate = float(txt)
+                main.distribute_soft(rate)
+            except ValueError:
+                print("Неверный формат")
+
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

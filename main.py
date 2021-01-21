@@ -54,20 +54,20 @@ class Task:
 class Main:
     def __init__(self):
         # Задачи
-        self.count_tasks = 20
+        self.count_tasks = 16
         self.tasks = list()
         # self.task_middle_score = list()
         r = Random()
         for i in range(self.count_tasks):
             new_task = Task()
             new_task.index = i
-            new_task.name = "T_1" + str(i)
+            new_task.name = "T_" + str(i)
             new_task.middle_score = int(r.random() * r.random() * r.random() * 200 + 10)
             # print("middle = " + str(new_task.middle_score))
             self.tasks.append(new_task)
 
         # Работники
-        self.count_workers = 5
+        self.count_workers = 4
         self.workers = list()
         # work_norm_sum = 0
         for i in range(self.count_workers):
@@ -75,7 +75,7 @@ class Main:
             new_worker.index = i
             new_worker.name = "Worker " + str(i)
             # Всем для начала одинаковое количество работы на выработку
-            new_worker.work_norm = 100
+            new_worker.work_norm = 25 + 25 * i
             # if i == 0:
             #     new_worker.work_norm = 40
             # work_norm_sum += new_worker.work_norm
@@ -155,6 +155,8 @@ class Main:
             worker.task_scores_sum = 0.0
             worker.scores_norm = list()
         self.prepare()
+        if overwork_rate == 0:
+            overwork_rate = 0.01
         print("rate=" + str(overwork_rate))
         # overwork_rate - насколько учитывать переработку в оценке задач
         free_workers_count = self.count_workers
@@ -175,24 +177,24 @@ class Main:
         while free_tasks_count and free_workers_count:
             iii += 1
             # Ищем самого незагруженого работника
-            lazy_worker_score = sys.float_info.max
-            for worker in self.workers:
-                if worker.free:
-                    if lazy_worker_score > worker.task_scores_sum:
-                        lazy_worker_score = worker.task_scores_sum
+            # lazy_worker_score = sys.float_info.max
+            # for worker in self.workers:
+            #     if worker.free:
+            #         if lazy_worker_score > worker.task_scores_sum:
+            #             lazy_worker_score = worker.task_scores_sum
 
             for task in self.tasks:
                 if task.free:
                     task.need_take = True
 
             # Ищем наибольший перекос
-            max_delta = -1
+            max_delta = -sys.float_info.max
             max_delta_index = -1
             for i in range(self.count_tasks):
                 if self.tasks[i].free and self.tasks[i].need_take:
                     task_workers_list = list()
-                    min_score = sys.float_info.max
-                    min_worker = None
+                    # min_score = sys.float_info.max
+                    # min_worker = None
                     avg_score = 0.0
                     # Хорошо было бы оценивать не по average, а как-то сложнее ???
                     count = 0
@@ -203,20 +205,25 @@ class Main:
                             #     max_score = worker.scores_norm[i]
                             avg_score += worker.scores_norm[i]
                             count += 1
-                            if min_score > worker.scores_norm[i]:
-                                min_score = worker.scores_norm[i]
-                                min_worker = worker
+                            # if min_score > worker.scores_norm[i]:
+                            #     min_score = worker.scores_norm[i]
+                            #     min_worker = worker
                     avg_score /= count
                     score_delta = 0.0
-                    rate = 1.0
+                    rate_next = 0.5
                     task_workers_sorted_list = sorted(task_workers_list, key=lambda work: work[1])
 
-                    for worker_score in task_workers_sorted_list:
-                        if worker_score[1] >= min_score:
-                            score_delta += (worker_score[1] + worker_score[0].task_scores_sum * overwork_rate
-                                            - min_score - min_worker.task_scores_sum * overwork_rate) \
-                                           * rate
-                            rate /= 2
+                    min_worker = task_workers_sorted_list[0][0]
+                    min_score = task_workers_sorted_list[0][1]
+                    for worker_score in task_workers_sorted_list[1:]:
+                        # score_delta += (worker_score[1] + worker_score[0].task_scores_sum * overwork_rate
+                        #                 - min_score - min_worker.task_scores_sum * overwork_rate) * rate_next
+                        score_delta += (worker_score[1] - min_score) * rate_next
+                        rate_next /= 2
+                    # overwork_rate
+                    score_delta *= (overwork_rate * min_worker.work_limit
+                                    - (min_worker.task_scores_sum + min_score / 2)
+                                    ) / (overwork_rate * min_worker.work_limit)
 
                     # if max_delta < avg_score - min_score:
                     if max_delta < score_delta:
@@ -253,12 +260,15 @@ class Main:
 
         print(distribute_string)
         print("distributed!")
+        all_task_sum = 0
         for worker in self.workers:
             tasks_list = list()
             for task in worker.tasks:
                 tasks_list.append(task.name)
             print(worker.name + ": " + str(round(worker.task_scores_sum, 3))
                   + "\t" + str(tasks_list))
+            all_task_sum += worker.task_scores_sum
+        print("all worker sum = " + str(round(all_task_sum, 3)))
 
     # Функция, распределяющая задачи по сотрудникам целыми
     # def distribute(self):

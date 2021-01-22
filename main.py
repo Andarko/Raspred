@@ -211,14 +211,13 @@ class Main:
                             rate_next /= 3
 
                         score_sum = cur_worker.task_scores_sum + 0.65 * cur_score
-                        if score_sum > 0.65 * cur_worker.work_limit:
-                            overwork_delta = score_sum - 0.65 * cur_worker.work_limit
-                            overwork_delta *= (avg_work_limit / cur_worker.work_limit)
-                            overwork_delta *= overwork_rate
-                            score_delta -= overwork_delta
-                        # score_delta *= overwork_rate ** ((cur_worker.work_limit
-                        #                                   - (cur_worker.task_scores_sum + 0.65 * cur_score)
-                        #                                   ) / cur_worker.work_limit)
+                        # if score_sum > 0.65 * cur_worker.work_limit:
+                        overwork_delta = score_sum - 0.65 * cur_worker.work_limit
+                        overwork_delta *= (avg_work_limit / cur_worker.work_limit)
+                        overwork_delta *= overwork_rate
+                        overwork_delta *= score_sum / cur_worker.work_limit
+                        score_delta -= overwork_delta
+                        # score_delta *= overwork_rate ** ((cur_worker.work_limit - score_sum) / cur_worker.work_limit)
                         if max_delta < score_delta:
                             max_delta = score_delta
                             max_delta_task_index = i

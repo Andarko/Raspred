@@ -43,7 +43,7 @@ class Task:
         # Должна быть взята (имеет большую удельную оценку)
         self.need_take = True
         # Минимальная оценка у рабочих
-        self.min_score = 1
+        self.min_score_norm = 1
 
         # Данные - результат решения
         self.worker = None
@@ -54,7 +54,7 @@ class Task:
 class Main:
     def __init__(self):
         # Задачи
-        self.count_tasks = 16
+        self.count_tasks = 18
         self.tasks = list()
         # self.task_middle_score = list()
         r = Random()
@@ -126,12 +126,12 @@ class Main:
         # Лимит работы уменьшаем в сторону минимальных оценок
         min_scores_sum = 0
         for task in self.tasks:
-            task.min_score = sys.float_info.max
+            task.min_score_norm = sys.float_info.max
             for worker in self.workers:
-                if task.min_score > worker.scores_norm[task.index]:
-                    task.min_score = worker.scores_norm[task.index]
+                if task.min_score_norm > worker.scores_norm[task.index]:
+                    task.min_score_norm = worker.scores_norm[task.index]
 
-            min_scores_sum += task.min_score
+            min_scores_sum += task.min_score_norm
         # Берем пределом работ среднее между средним лимитом и лимитом минимальной оценки
         reduction_rate = min_scores_sum + 0.5 * (1 - min_scores_sum)
         for worker in self.workers:
@@ -155,8 +155,8 @@ class Main:
             worker.task_scores_sum = 0.0
             worker.scores_norm = list()
         self.prepare()
-        if overwork_rate == 0:
-            overwork_rate = 0.01
+        # if overwork_rate == 0:
+        #     overwork_rate = 0.01
         print("rate=" + str(overwork_rate))
         # overwork_rate - насколько учитывать переработку в оценке задач
         free_workers_count = self.count_workers
@@ -164,13 +164,13 @@ class Main:
         undistributed = 0
         work_norm_sum = 0
         # Максимальный лимит работы среди работников
-        max_work_limit = 0
+        avg_work_limit = 0
         for worker in self.workers:
-            if max_work_limit < worker.work_limit:
-                max_work_limit = worker.work_limit
+            avg_work_limit += worker.work_limit
             work_norm_sum += worker.work_norm
             for i in range(self.count_tasks):
                 undistributed += worker.scores_norm[i]
+        avg_work_limit /= self.count_workers
 
         distribute_string = ""
         iii = 0
@@ -189,73 +189,78 @@ class Main:
 
             # Ищем наибольший перекос
             max_delta = -sys.float_info.max
-            max_delta_index = -1
+            max_delta_task_index = -1
+            max_delta_worker = None
             for i in range(self.count_tasks):
                 if self.tasks[i].free and self.tasks[i].need_take:
                     task_workers_list = list()
-                    # min_score = sys.float_info.max
-                    # min_worker = None
-                    avg_score = 0.0
-                    # Хорошо было бы оценивать не по average, а как-то сложнее ???
-                    count = 0
+
                     for worker in self.workers:
-                        if worker.free:
+                        # if worker.free:
+                        if True:
                             task_workers_list.append((worker, worker.scores_norm[i]))
-                            # if max_score < worker.scores_norm[i]:
-                            #     max_score = worker.scores_norm[i]
-                            avg_score += worker.scores_norm[i]
-                            count += 1
-                            # if min_score > worker.scores_norm[i]:
-                            #     min_score = worker.scores_norm[i]
-                            #     min_worker = worker
-                    avg_score /= count
-                    score_delta = 0.0
-                    rate_next = 0.5
                     task_workers_sorted_list = sorted(task_workers_list, key=lambda work: work[1])
 
-                    min_worker = task_workers_sorted_list[0][0]
-                    min_score = task_workers_sorted_list[0][1]
-                    for worker_score in task_workers_sorted_list[1:]:
-                        # score_delta += (worker_score[1] + worker_score[0].task_scores_sum * overwork_rate
-                        #                 - min_score - min_worker.task_scores_sum * overwork_rate) * rate_next
-                        score_delta += (worker_score[1] - min_score) * rate_next
-                        rate_next /= 2
-                    # overwork_rate
-                    score_delta *= (overwork_rate * min_worker.work_limit
-                                    - (min_worker.task_scores_sum + min_score / 2)
-                                    ) / (overwork_rate * min_worker.work_limit)
+                    for j in range(len(task_workers_sorted_list)):
+                        score_delta = 0.0
+                        rate_next = 2 / (3 ** (j + 1))
+                        cur_worker = task_workers_sorted_list[j][0]
+                        cur_score = task_workers_sorted_list[j][1]
+                        for worker_score in task_workers_sorted_list[j + 1:]:
+                            score_delta += (worker_score[1] - cur_score) * rate_next
+                            rate_next /= 3
 
-                    # if max_delta < avg_score - min_score:
-                    if max_delta < score_delta:
-                        # max_delta = avg_score - min_score
-                        max_delta = score_delta
-                        max_delta_index = i
+                        score_sum = cur_worker.task_scores_sum + 0.65 * cur_score
+                        if score_sum > 0.65 * cur_worker.work_limit:
+                            overwork_delta = score_sum - 0.65 * cur_worker.work_limit
+                            overwork_delta *= (avg_work_limit / cur_worker.work_limit)
+                            overwork_delta *= overwork_rate
+                            score_delta -= overwork_delta
+                        # score_delta *= overwork_rate ** ((cur_worker.work_limit
+                        #                                   - (cur_worker.task_scores_sum + 0.65 * cur_score)
+                        #                                   ) / cur_worker.work_limit)
+                        if max_delta < score_delta:
+                            max_delta = score_delta
+                            max_delta_task_index = i
+                            max_delta_worker = cur_worker
 
-            min_score = sys.float_info.max
-            for worker in self.workers:
-                if worker.free:
-                    if min_score > worker.scores_norm[max_delta_index] + worker.task_scores_sum * overwork_rate:
-                        min_score = worker.scores_norm[max_delta_index] + worker.task_scores_sum * overwork_rate
-                        worker_min_score = worker
+                    # min_worker = task_workers_sorted_list[0][0]
+                    # min_score = task_workers_sorted_list[0][1]
+                    # for worker_score in task_workers_sorted_list[1:]:
+                    #     score_delta += (worker_score[1] - min_score) * rate_next
+                    #     rate_next /= 3
+                    # score_delta *= (overwork_rate * min_worker.work_limit
+                    #                 - (min_worker.task_scores_sum + min_score / 2)
+                    #                 ) / (overwork_rate * min_worker.work_limit)
+                    # if max_delta < score_delta:
+                    #     max_delta = score_delta
+                    #     max_delta_task_index = i
+
+            # min_score = sys.float_info.max
+            # for worker in self.workers:
+            #     # if worker.free:
+            #     if True:
+            #         if min_score > worker.scores_norm[max_delta_task_index] + worker.task_scores_sum * overwork_rate:
+            #             min_score = worker.scores_norm[max_delta_task_index] + worker.task_scores_sum * overwork_rate
+            #             max_delta_worker = worker
 
             # Присвоение задачи
-
-            distribute_string += (worker_min_score.name + " <= " + self.tasks[max_delta_index].name + ": "
-                                  + str(round(worker_min_score.scores_norm[max_delta_index], 3))
-                                  + "(+" + str(round(worker_min_score.scores_norm[max_delta_index]
-                                                     - self.tasks[max_delta_index].min_score, 3)) + ")   "
+            distribute_string += (max_delta_worker.name + " <= " + self.tasks[max_delta_task_index].name + ": "
+                                  + str(round(max_delta_worker.scores_norm[max_delta_task_index], 3))
+                                  + "(+" + str(round(max_delta_worker.scores_norm[max_delta_task_index]
+                                                     - self.tasks[max_delta_task_index].min_score_norm, 3)) + ")   "
                                   )
             if iii % 5 == 0:
                 distribute_string += "\r\n"
 
-            self.tasks[max_delta_index].free = False
-            self.tasks[max_delta_index].need_take = False
-            self.tasks[max_delta_index].worker = worker_min_score
-            worker_min_score.tasks.append(self.tasks[max_delta_index])
-            worker_min_score.task_scores_sum += worker_min_score.scores_norm[max_delta_index]
-            if worker_min_score.task_scores_sum > worker_min_score.work_limit:
-                worker_min_score.free = False
-                # print("Worker limit " + str(worker_min_score.index))
+            self.tasks[max_delta_task_index].free = False
+            self.tasks[max_delta_task_index].need_take = False
+            self.tasks[max_delta_task_index].worker = max_delta_worker
+            max_delta_worker.tasks.append(self.tasks[max_delta_task_index])
+            max_delta_worker.task_scores_sum += max_delta_worker.scores_norm[max_delta_task_index]
+            if max_delta_worker.task_scores_sum > max_delta_worker.work_limit:
+                max_delta_worker.free = False
+                # print("Worker limit " + str(max_delta_worker.index))
             free_tasks_count -= 1
 
         print(distribute_string)
@@ -430,7 +435,7 @@ class Main:
                 f.write("task\n")
                 f.write(task.name + "\n")
                 f.write(str(task.index) + "\n")
-                f.write(str(task.min_score) + "\n")
+                f.write(str(task.min_score_norm) + "\n")
             print("saved to " + file_name)
 
     def load_from_file(self):
